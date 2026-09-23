@@ -1,0 +1,67 @@
+# AgriPath Configuration
+# 6-Wheel Skid-Steer Rover with Dual Front Cutting Blades
+
+model:
+  path: "models/best.onnx"
+  input_size: 640
+  conf_threshold: 0.60
+  uncertain_min: 0.30
+  uncertain_max: 0.60
+  iou_threshold: 0.45
+  tiling:
+    enabled: true
+    tile_size: 640
+    overlap_ratio: 0.20
+    min_image_dimension: 960
+
+camera:
+  mount: "robot_front_down"  # "robot_front_down" (default) or "overhead_fixed"
+  default_source: "web"      # "web" or "pi"
+  auto_capture_interval_s: 0 # 0 = disabled
+  resolution:
+    width: 1280
+    height: 720
+
+calibration:
+  mode: "manual"             # "manual", "two_point", or "homography"
+  cm_per_pixel: 0.15         # Real-world cm per image pixel (default fallback)
+  status: "uncalibrated"     # "uncalibrated" or "calibrated"
+  ground_plane_y_offset_cm: 10.0 # Distance from robot front edge to bottom of image field
+  homography_matrix: null    # 3x3 matrix as nested list when calibrated via ArUco/grid
+
+robot:
+  length_cm: 30.0            # Total chassis length
+  width_cm: 25.0             # Total chassis width
+  safety_margin_cm: 4.0      # Buffer around crops (must be tuned to drift)
+  speed_cm_s: 15.0           # Nominal linear speed
+  turn_time_s_per_90: 1.5    # Seconds required for a 90 deg in-place turn
+  grid_cell_size_cm: 2.0     # Occupancy grid resolution
+  min_step_cm: 2.0           # Minimum discrete translation step
+
+blade:
+  count: 2
+  offset_forward_cm: 18.0    # Distance from robot centre to blade cutting tip
+  total_width_cm: 16.0       # Combined cutting width of both blades
+  spacing_cm: 6.0            # Distance between blade centres
+  tolerance_cm: 3.0          # Lateral alignment tolerance to catch weed
+  pass_cm: 8.0               # Forward distance travelled while cutting
+  enabled: false             # SAFETY: false by default
+  dry_run: true              # True = simulate blade without activating motor
+
+planner:
+  turn_penalty_cm: 35.0      # High penalty because pivoting on soil causes slippage
+  allow_backward: false      # Backward disabled by default (camera cannot see behind)
+  return_to_start: false     # Optional return to starting pose (0, 0, 0)
+  max_segment_cm: 50.0       # Max distance before re-capturing in replan mode
+  headings: [0, 90, 180, 270]# 0 = +Y (Forward), 90 = +X (Right), 180 = -Y (Back), 270 = -X (Left)
+
+execution:
+  mode: "open_loop"          # "open_loop" (simulation) or "replan" (real robot closed-loop)
+  max_retries: 2             # Re-cut attempts if weed is still detected
+  controller: "simulated"    # "simulated" or "serial"
+
+motion:
+  serial_port: "COM3"        # e.g., "/dev/ttyACM0" on Pi, "COM3" on Windows
+  baudrate: 115200
+  heartbeat_ms: 200          # Heartbeat ping sent every 200 ms
+  failsafe_ms: 500           # Firmware halts motors and blades if no heartbeat for 500 ms

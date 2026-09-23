@@ -1,0 +1,7 @@
+names:
+  0: crop
+  1: weed
+path: D:/SIH/Weed Detector/data/custom_dataset
+test: images/test
+train: images/train
+val: images/val
