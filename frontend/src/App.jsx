@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import Navbar from './components/Navbar';
 import CanvasViewer from './components/CanvasViewer';
 import ControlPanel from './components/ControlPanel';
@@ -16,6 +17,7 @@ export default function App() {
   // Backend Health & Config State
   const [health, setHealth] = useState(null);
   const [config, setConfig] = useState(null);
+  const [showOfflineBanner, setShowOfflineBanner] = useState(false);
 
   // Vision & Planning State
   const [imageSrc, setImageSrc] = useState(null);
@@ -52,12 +54,15 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setHealth(data);
+        setShowOfflineBanner(false);
       } else {
         setHealth(null);
+        setShowOfflineBanner(true);
       }
     } catch (e) {
       console.warn('Backend offline or not reachable, using Vercel Cloud Demo mode:', e);
       setHealth(null);
+      setShowOfflineBanner(true);
     }
   };
 
@@ -392,6 +397,23 @@ export default function App() {
         onOpenSettings={() => setShowSettings(true)}
         onOpenCalibration={() => setShowCalibration(true)}
       />
+
+      {showOfflineBanner && !health && (
+        <div className="bg-amber-950/90 border-b border-amber-500/50 text-amber-200 px-4 py-2.5 text-xs flex flex-wrap items-center justify-between gap-2 shadow-inner">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>
+              <strong>Vercel Cloud Demo Mode:</strong> The trained YOLOv8 AI model runs on the Python backend (not hosted inside Vercel static hosting). You are seeing simulated demo boxes. Run locally at <code className="bg-amber-900/60 px-1.5 py-0.5 rounded text-white font-mono">http://localhost:8000</code> or enter your backend URL in Settings (⚙️).
+            </span>
+          </div>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="px-3 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-semibold transition shrink-0"
+          >
+            Connect Backend (⚙️)
+          </button>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto p-4">
         {currentTab === 'perception' ? (
