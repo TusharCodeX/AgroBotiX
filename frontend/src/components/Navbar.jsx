@@ -7,7 +7,9 @@ import {
   Moon, 
   Compass, 
   AlertTriangle, 
-  CheckCircle2 
+  CheckCircle2,
+  Sprout,
+  XCircle
 } from 'lucide-react';
 
 export default function Navbar({ 
@@ -17,9 +19,12 @@ export default function Navbar({
   theme, 
   toggleTheme, 
   onOpenSettings, 
-  onOpenCalibration 
+  onOpenCalibration,
+  selectedCropContext,
+  onCropContextChange,
+  availableCrops
 }) {
-  const isDemo = health?.demo_mode;
+  const isModelAvailable = health?.model_available ?? true;
   const isCalibrated = health?.calibration?.status === 'calibrated';
 
   return (
@@ -34,32 +39,50 @@ export default function Navbar({
             <div className="flex items-center gap-2">
               <h1 className="font-bold text-xl tracking-tight text-white">AgriPath</h1>
               <span className="text-xs px-2 py-0.5 rounded font-mono font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                6-Wheel Rover
+                Indian Field Vision
               </span>
             </div>
-            <p className="text-xs text-slate-400">Autonomous Weed Targeting & Dual-Blade Path Planner</p>
+            <p className="text-xs text-slate-400">Autonomous Weed Targeting & Dual-Blade Skid-Steer Planner</p>
           </div>
         </div>
 
-        {/* Status Indicators & Demo Banner */}
+        {/* Indian Crop Context Selector */}
+        <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700/80 rounded-lg px-3 py-1.5 shadow-inner">
+          <Sprout className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="text-[11px] text-slate-400 font-medium">Crop Context:</span>
+          <select
+            value={selectedCropContext || 'wheat'}
+            onChange={(e) => onCropContextChange(e.target.value)}
+            className="bg-transparent border-none text-emerald-300 font-semibold text-xs focus:outline-none cursor-pointer pr-1"
+          >
+            <option value="wheat" className="bg-slate-900 text-white">🌾 Wheat (Triticum aestivum)</option>
+            <option value="rice" className="bg-slate-900 text-white">🌾 Rice / Paddy (Oryza sativa)</option>
+            <option value="mustard" className="bg-slate-900 text-white">🌼 Mustard (Brassica juncea)</option>
+            <option value="maize" className="bg-slate-900 text-white">🌽 Maize (Zea mays)</option>
+            <option value="sugarcane" className="bg-slate-900 text-white">🎋 Sugarcane (Saccharum officinarum)</option>
+            <option value="vegetables" className="bg-slate-900 text-white">🍅 Vegetables (Tomato/Brinjal/Okra/Onion)</option>
+            <option value="sorghum_millets" className="bg-slate-900 text-white">🌾 Sorghum & Millets (Jowar/Bajra/Ragi)</option>
+            <option value="pulses_oilseeds" className="bg-slate-900 text-white">🫘 Pulses & Oilseeds (Gram/Arhar/Soybean)</option>
+            <option value="cotton" className="bg-slate-900 text-white">🌿 Cotton (Gossypium hirsutum)</option>
+            <option value="orchard" className="bg-slate-900 text-white">🍎 Fruit Orchards (Mango/Guava/Apple)</option>
+          </select>
+        </div>
+
+        {/* Status Indicators */}
         <div className="flex items-center gap-3">
-          {health?.detector_model ? (
-            <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
-              isDemo 
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' 
-                : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-            }`}>
+          {health?.detector_model && health.detector_model !== 'MODEL UNAVAILABLE' ? (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border bg-emerald-500/20 text-emerald-300 border-emerald-500/40">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
               <span>{health.detector_model}</span>
             </div>
           ) : (
             <div 
               onClick={onOpenSettings} 
-              title="Click to connect a custom backend URL in Settings"
-              className="flex items-center gap-1.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-3 py-1 rounded-full text-xs font-semibold cursor-pointer hover:bg-indigo-500/30 transition"
+              title="Model unavailable. Click to connect backend or check models/best.onnx"
+              className="flex items-center gap-1.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 px-3 py-1 rounded-full text-xs font-semibold cursor-pointer hover:bg-rose-500/30 transition animate-pulse"
             >
-              <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
-              <span>Vercel Cloud Demo</span>
+              <XCircle className="w-3.5 h-3.5 text-rose-400" />
+              <span>MODEL UNAVAILABLE</span>
             </div>
           )}
 

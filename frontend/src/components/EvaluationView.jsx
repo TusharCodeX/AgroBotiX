@@ -95,15 +95,52 @@ export default function EvaluationView() {
 
         <div className="card bg-slate-900/80 border-slate-800">
           <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-            <span>Crop Safety Rate</span>
+            <span>Crop Safety Buffer</span>
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="text-2xl font-bold font-mono text-emerald-400">
-            100.0%
+            {evalData?.field_hazard_metrics ? (100 - evalData.field_hazard_metrics.crop_safety_buffer_violation_rate * 100).toFixed(1) + '%' : '100.0%'}
           </div>
-          <span className="text-[10px] text-slate-500">0 Crops Contacted (Target: 0)</span>
+          <span className="text-[10px] text-slate-500">
+            {evalData?.field_hazard_metrics?.crop_safety_buffer_violations ?? 0} Safety Buffer Violations
+          </span>
         </div>
       </div>
+
+      {/* Indian Field Agronomic Hazard Metrics */}
+      {evalData?.field_hazard_metrics && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="card bg-slate-900/80 border-slate-800/80">
+            <span className="text-[11px] text-slate-400 font-medium">Soil & Residue $\to$ Weed FPR</span>
+            <div className="text-xl font-bold font-mono text-amber-300 mt-1">
+              {(evalData.field_hazard_metrics.soil_to_weed_false_positive_rate * 100).toFixed(1)}%
+            </div>
+            <span className="text-[10px] text-slate-500">
+              {evalData.field_hazard_metrics.soil_to_weed_false_positive_count} false alarms on bare soil/stones/stubble
+            </span>
+          </div>
+
+          <div className="card bg-slate-900/80 border-slate-800/80">
+            <span className="text-[11px] text-slate-400 font-medium">Crop $\to$ Weed FPR (Crop Damage Risk)</span>
+            <div className="text-xl font-bold font-mono text-rose-400 mt-1">
+              {(evalData.field_hazard_metrics.crop_to_weed_false_positive_rate * 100).toFixed(1)}%
+            </div>
+            <span className="text-[10px] text-slate-500">
+              {evalData.field_hazard_metrics.crop_to_weed_false_positive_count} crops misclassified as actionable weeds
+            </span>
+          </div>
+
+          <div className="card bg-slate-900/80 border-slate-800/80">
+            <span className="text-[11px] text-slate-400 font-medium">Weed $\to$ Crop FNR (Escaped Weeds)</span>
+            <div className="text-xl font-bold font-mono text-sky-300 mt-1">
+              {(evalData.field_hazard_metrics.weed_to_crop_false_negative_rate * 100).toFixed(1)}%
+            </div>
+            <span className="text-[10px] text-slate-500">
+              {evalData.field_hazard_metrics.weed_to_crop_false_negative_count} weeds misclassified as crops
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Per-Class Breakdown Table */}
       <div className="card bg-slate-900/80 border-slate-800">

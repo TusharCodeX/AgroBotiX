@@ -18,6 +18,8 @@ env/
 runs/
 *.pt
 data/field_dataset/
+data/indian_field_dataset/
+data/feedback/
 weights/
 
 # Node

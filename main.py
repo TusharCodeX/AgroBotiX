@@ -21,7 +21,7 @@ from backend.camera.web_source import WebUploadSource
 from backend.camera.pi_source import PiCameraSource
 from backend.detector.base import PlantClass, PlantStatus, PlantDetection, DetectionResult
 from backend.detector.onnx_detector import OnnxDetector
-from backend.detector.demo_detector import DemoDetector
+from backend.detector.indian_crops import list_available_contexts, get_crop_profile, INDIAN_CROP_PROFILES
 from backend.detector.tiling import TiledInferenceManager
 from backend.detector.temporal_filter import TemporalFilter
 from backend.calibration.calibrator import RobotCalibrator
@@ -49,23 +49,16 @@ def save_config(cfg: Dict[str, Any]) -> None:
 config = load_config()
 
 # --- INITIALIZE CORE SERVICES ---
-# Detector
+# Detector - Strict real inference, no silent fake demo fallback
 model_path = config.get("model", {}).get("path", "models/best.onnx")
-if os.path.exists(model_path):
-    detector = OnnxDetector(
-        model_path=model_path,
-        input_size=config.get("model", {}).get("input_size", 640),
-        conf_threshold=config.get("model", {}).get("conf_threshold", 0.60),
-        uncertain_min=config.get("model", {}).get("uncertain_min", 0.30),
-        iou_threshold=config.get("model", {}).get("iou_threshold", 0.45),
-    )
-    is_demo_mode = False
-else:
-    detector = DemoDetector(
-        conf_threshold=config.get("model", {}).get("conf_threshold", 0.60),
-        uncertain_min=config.get("model", {}).get("uncertain_min", 0.30),
-    )
-    is_demo_mode = True
+detector = OnnxDetector(
+    model_path=model_path,
+    input_size=config.get("model", {}).get("input_size", 640),
+    candidate_threshold=config.get("model", {}).get("conf_threshold", 0.70),
+    uncertain_min=config.get("model", {}).get("uncertain_min", 0.50),
+    iou_threshold=config.get("model", {}).get("iou_threshold", 0.45),
+    default_crop_context=config.get("agronomy", {}).get("default_crop_context", "wheat"),
+)
 
 tiler = TiledInferenceManager(
     tile_size=config.get("model", {}).get("tiling", {}).get("tile_size", 640),
@@ -147,16 +140,24 @@ class FeedbackRequest(BaseModel):
 # --- API ROUTES ---
 @app.get("/api/health")
 def get_health():
+    model_loaded = detector.is_model_loaded()
     return {
         "status": "online",
-        "app_name": "AgriPath",
-        "demo_mode": is_demo_mode,
-        "detector_model": detector.model_name,
+        "app_name": "AgriPath Indian Agricultural Vision",
+        "model_available": model_loaded,
+        "detector_model": detector.model_name if model_loaded else "MODEL UNAVAILABLE",
+        "default_crop_context": detector.default_crop_context,
+        "available_crop_contexts": list_available_contexts(),
         "calibration": calibrator.to_dict(),
         "robot_config": config.get("robot", {}),
         "blade_config": config.get("blade", {}),
         "serial_connected": serial_controller._is_connected,
     }
+
+@app.get("/api/crops")
+def get_crop_contexts():
+    """Returns available Indian crop contexts with associated botanical weeds."""
+    return {"crops": list_available_contexts()}
 
 @app.get("/api/config")
 def get_configuration():
@@ -174,16 +175,27 @@ async def detect_plants(
     file: Optional[UploadFile] = File(None),
     image_base64: Optional[str] = Form(None),
     is_live: bool = Form(False),
+    crop_context: str = Form("wheat"),
+    candidate_threshold: Optional[float] = Form(None),
+    uncertain_min: Optional[float] = Form(None),
+    safety_buffer_cm: Optional[float] = Form(None),
 ):
     """
-    Receives image via multipart file or base64, runs detection,
-    applies confidence safety policy, and maps coordinates to robot frame cm.
+    Receives field image, runs hierarchical 3-stage Indian vision pipeline:
+    1. YOLOv8 ONNX field perception
+    2. Indian crop-specific weed species profiling
+    3. Multi-tiered safety & soil/stone/shadow rejection
     """
+    if not detector.is_model_loaded():
+        raise HTTPException(
+            status_code=503,
+            detail="MODEL UNAVAILABLE: models/best.onnx is missing or uninitialized. Train or load the model."
+        )
+
     img_bytes = None
-    if file:
+    if file is not None and hasattr(file, "read"):
         img_bytes = await file.read()
-    elif image_base64:
-        # Strip data URL prefix if present
+    elif image_base64 is not None and isinstance(image_base64, str):
         if "," in image_base64:
             image_base64 = image_base64.split(",")[1]
         img_bytes = base64.b64decode(image_base64)
@@ -197,13 +209,17 @@ async def detect_plants(
 
     h, w = image.shape[:2]
 
-    # Run detection (with tiling if image is large)
-    if tiler.should_tile((h, w)):
-        det_result = tiler.detect_tiled(detector, image)
-    else:
-        det_result = detector.detect(image)
+    # Run Indian Agricultural Detection Pipeline
+    det_result = detector.detect(
+        image,
+        crop_context=crop_context,
+        candidate_threshold=candidate_threshold,
+        uncertain_min=uncertain_min,
+        safety_buffer_cm=safety_buffer_cm,
+        cm_per_pixel=calibrator.cm_per_pixel,
+    )
 
-    # Apply temporal filter in live mode
+    # Apply temporal filter in live camera mode
     if is_live:
         det_result = temporal_filter.filter_frame(det_result)
 
@@ -254,7 +270,7 @@ def plan_path(req: PlanRequest):
             id=d["id"],
             class_id=d["class_id"],
             raw_class_name=d["raw_class_name"],
-            status=PlantStatus(d["status"]),
+            status=PlantStatus.from_string(d.get("status", "UNCERTAIN")),
             confidence=d["confidence"],
             bbox_px=tuple(d["bbox_px"]),
             center_px=tuple(d["center_px"]),
@@ -371,10 +387,12 @@ def execute_motion_command(cmd: Dict[str, Any]):
     return {"success": success, "status": ctrl.get_status()}
 
 @app.get("/api/evaluate")
-def evaluate_model():
+def evaluate_model(crop_context: str = "wheat"):
     from evaluate import evaluate_dataset
-    dataset_dir = os.path.join(os.path.dirname(__file__), "data", "test")
-    res = evaluate_dataset(dataset_dir, detector)
+    dataset_dir = os.path.join(os.path.dirname(__file__), "data", "indian_field_dataset", "images", "test")
+    if not os.path.exists(dataset_dir):
+        dataset_dir = os.path.join(os.path.dirname(__file__), "data", "test")
+    res = evaluate_dataset(dataset_dir, detector, crop_context=crop_context)
     return res
 
 # Mount Static Frontend if built

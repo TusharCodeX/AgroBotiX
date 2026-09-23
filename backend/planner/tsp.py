@@ -44,8 +44,12 @@ class MultiTargetPlanner:
         """
         Plans complete mission for rover to reach and cut every reachable weed.
         """
-        # Filter confirmed weeds with real-world coordinates
-        weeds = [w for w in weed_detections if w.status == PlantStatus.WEED and w.center_cm is not None]
+        # Filter actionable weeds with real-world coordinates
+        weeds = [
+            w for w in weed_detections 
+            if (w.is_target or w.status in (PlantStatus.ACTIONABLE_WEED, PlantStatus.WEED)) 
+            and w.center_cm is not None
+        ]
 
         skipped_weeds: List[Dict[str, Any]] = []
         weed_candidates: Dict[int, List[Tuple[float, float, int]]] = {}

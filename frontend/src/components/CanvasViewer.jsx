@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Layers, Eye, EyeOff, Flag, Crosshair } from 'lucide-react';
+import { Layers, Eye, EyeOff, Flag, Crosshair, ShieldAlert, Sparkles, CheckCircle2, AlertTriangle, XCircle, Info } from 'lucide-react';
 
 export default function CanvasViewer({
   imageSrc,
@@ -19,14 +19,15 @@ export default function CanvasViewer({
     crops: true,
     weeds: true,
     uncertain: true,
+    rejected: false,
+    safetyBuffers: true,
     path: true,
     waypoints: true,
     footprint: true,
     bladeZone: true,
-    gridOverlay: false,
   });
 
-  const [hoveredPlant, setHoveredPlant] = useState(null);
+  const [selectedPlant, setSelectedPlant] = useState(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -34,7 +35,6 @@ export default function CanvasViewer({
     const ctx = canvas.getContext('2d');
 
     if (!imageSrc) {
-      // Draw placeholder
       canvas.width = 800;
       canvas.height = 500;
       ctx.fillStyle = '#0f172a';
@@ -42,7 +42,7 @@ export default function CanvasViewer({
       ctx.fillStyle = '#475569';
       ctx.font = '16px Inter, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('Capture a field image or upload a photo to begin', canvas.width / 2, canvas.height / 2);
+      ctx.fillText('Capture or upload Indian crop field image to begin', canvas.width / 2, canvas.height / 2);
       return;
     }
 
@@ -57,62 +57,113 @@ export default function CanvasViewer({
       // 1. Draw original field image
       ctx.drawImage(img, 0, 0, w, h);
 
+      const cmScale = calibrator?.cm_per_pixel || 0.15;
+
       // Helper for converting cm to canvas pixel
       const cmToPx = (xCm, yCm) => {
-        if (calibrator && calibrator.cm_per_pixel) {
-          const scale = calibrator.cm_per_pixel;
-          const frontY = (calibrator.robot_length_cm || 30.0) / 2 + (calibrator.ground_y_offset_cm || 10.0);
-          const px = (xCm / scale) + w / 2;
-          const py = h - ((yCm - frontY) / scale);
-          return [px, py];
-        }
-        return [w / 2 + xCm * 5, h - yCm * 5];
+        const frontY = (calibrator?.robot_length_cm || 30.0) / 2 + (calibrator?.ground_y_offset_cm || 10.0);
+        const px = (xCm / cmScale) + w / 2;
+        const py = h - ((yCm - frontY) / cmScale);
+        return [px, py];
       };
 
-      // 2. Draw Bounding Boxes
+      // 2. Draw Crop Safety Buffers (Dashed Circles around Crops)
+      if (layers.safetyBuffers) {
+        detections.forEach((det) => {
+          if (det.status === 'CROP') {
+            const [cx, cy] = det.center_px;
+            const [x1, y1, x2, y2] = det.bbox_px;
+            const plantRadiusPx = Math.max(x2 - x1, y2 - y1) / 2.0;
+            // Default 5cm buffer in pixels: 5.0 / cmScale
+            const bufferPx = plantRadiusPx + (5.0 / cmScale);
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(cx, cy, bufferPx, 0, Math.PI * 2);
+            ctx.setLineDash([6, 6]);
+            ctx.strokeStyle = 'rgba(234, 179, 8, 0.45)'; // Amber warning boundary
+            ctx.lineWidth = 2;
+            ctx.fillStyle = 'rgba(234, 179, 8, 0.05)';
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+          }
+        });
+      }
+
+      // 3. Draw Bounding Boxes and Status Overlays
       detections.forEach((det) => {
         const [x1, y1, x2, y2] = det.bbox_px;
         const [cx, cy] = det.center_px;
         const bw = x2 - x1;
         const bh = y2 - y1;
 
-        if (det.status === 'CROP' && !layers.crops) return;
-        if (det.status === 'WEED' && !layers.weeds) return;
-        if (det.status === 'UNCERTAIN' && !layers.uncertain) return;
+        const isActionableWeed = det.status === 'ACTIONABLE_WEED' || (det.status === 'WEED' && det.is_target);
+        const isCrop = det.status === 'CROP';
+        const isUncertain = det.status === 'UNCERTAIN';
+        const isRejected = det.status === 'REJECTED';
+
+        if (isCrop && !layers.crops) return;
+        if (isActionableWeed && !layers.weeds) return;
+        if (isUncertain && !layers.uncertain) return;
+        if (isRejected && !layers.rejected) return;
 
         let color = '#22c55e'; // Green for Crop
         let label = `CROP #${det.id}`;
-        if (det.status === 'WEED') {
-          color = '#ef4444'; // Red for Weed
+        let tag = 'PROTECT';
+
+        if (isActionableWeed) {
+          color = '#ef4444'; // Red for Actionable Weed
           label = `WEED #${det.id}`;
-        } else if (det.status === 'UNCERTAIN') {
-          color = '#eab308'; // Yellow for Uncertain
+          tag = 'TARGET';
+        } else if (isUncertain) {
+          color = '#eab308'; // Yellow for Uncertain / Safety Buffer
           label = `UNCERTAIN #${det.id}`;
+          tag = 'DO NOT CUT';
+        } else if (isRejected) {
+          color = '#94a3b8'; // Gray for Soil/Stone/Shadow
+          label = `REJECTED #${det.id}`;
+          tag = 'SOIL/REJECT';
         }
 
-        ctx.lineWidth = 2.5;
+        const isSelected = selectedPlant && selectedPlant.id === det.id;
+
+        // Bounding box fill and stroke
+        ctx.lineWidth = isSelected ? 3.5 : 2.0;
         ctx.strokeStyle = color;
-        ctx.fillStyle = color + '22';
+        ctx.fillStyle = color + (isSelected ? '44' : '22');
         ctx.fillRect(x1, y1, bw, bh);
         ctx.strokeRect(x1, y1, bw, bh);
 
-        // Center dot
+        // Center crosshair / dot
         ctx.beginPath();
-        ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+        ctx.arc(cx, cy, 4.5, 0, Math.PI * 2);
         ctx.fillStyle = color;
         ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
 
-        // Label pill
-        ctx.font = 'bold 12px JetBrains Mono, monospace';
-        const text = `${label} (${(det.confidence * 100).toFixed(0)}%)`;
+        // Label pill at top
+        ctx.font = 'bold 11px JetBrains Mono, monospace';
+        const speciesShort = det.species_name ? ` | ${det.species_name.split(' ')[0]}` : '';
+        const text = `${label} (${(det.confidence * 100).toFixed(0)}%)${speciesShort}`;
         const textWidth = ctx.measureText(text).width;
+
         ctx.fillStyle = color;
-        ctx.fillRect(x1, Math.max(0, y1 - 20), textWidth + 12, 20);
+        ctx.fillRect(x1, Math.max(0, y1 - 20), textWidth + 10, 20);
         ctx.fillStyle = '#000000';
-        ctx.fillText(text, x1 + 6, Math.max(14, y1 - 5));
+        ctx.fillText(text, x1 + 5, Math.max(14, y1 - 5));
+
+        // Draw distance line from weed to nearest crop
+        if (det.dist_to_nearest_crop_cm !== null && det.dist_to_nearest_crop_cm !== undefined && det.dist_to_nearest_crop_cm < 15.0) {
+          ctx.font = '9px monospace';
+          ctx.fillStyle = color;
+          ctx.fillText(`${det.dist_to_nearest_crop_cm.toFixed(1)}cm to crop`, x1, y2 + 12);
+        }
       });
 
-      // 3. Draw Planned Path & Waypoints
+      // 4. Draw Planned Path & Waypoints
       if (plan && plan.waypoints && layers.path) {
         const waypoints = plan.waypoints;
 
@@ -175,7 +226,6 @@ export default function CanvasViewer({
             ctx.lineWidth = 2;
             ctx.stroke();
 
-            // Step number text
             ctx.font = 'bold 9px JetBrains Mono, monospace';
             ctx.fillStyle = '#ffffff';
             ctx.textAlign = 'center';
@@ -185,51 +235,56 @@ export default function CanvasViewer({
         }
       }
 
-      // 4. Draw Animated Rover Simulation Avatar
+      // 5. Draw Animated Rover Avatar
       if (simPose) {
         const [cpx, cpy] = cmToPx(simPose.x, simPose.y);
         ctx.save();
         ctx.translate(cpx, cpy);
-        // Heading 0 is +Y (upwards on screen, which is -py)
         ctx.rotate((simPose.heading * Math.PI) / 180);
 
-        // Rover body (rectangle)
-        const rw = 25; // display width
-        const rl = 30; // display length
+        const rw = 25;
+        const rl = 30;
         ctx.fillStyle = 'rgba(30, 41, 59, 0.9)';
         ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 2;
         ctx.fillRect(-rw / 2, -rl / 2, rw, rl);
         ctx.strokeRect(-rw / 2, -rl / 2, rw, rl);
 
-        // 6 Skid-steer Wheels (3 left, 3 right)
-        ctx.fillStyle = '#64748b';
-        [-rl / 2 + 3, 0, rl / 2 - 3].forEach((wy) => {
-          ctx.fillRect(-rw / 2 - 4, wy - 3, 4, 6);
-          ctx.fillRect(rw / 2, wy - 3, 4, 6);
+        // Heading arrow
+        ctx.beginPath();
+        ctx.moveTo(0, -rl / 2);
+        ctx.lineTo(-6, -rl / 2 + 10);
+        ctx.lineTo(6, -rl / 2 + 10);
+        ctx.closePath();
+        ctx.fillStyle = '#38bdf8';
+        ctx.fill();
+
+        // 6 Wheels
+        ctx.fillStyle = '#0f172a';
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 1;
+        const wheelW = 4;
+        const wheelL = 7;
+        [-rl / 3, 0, rl / 3].forEach((offsetY) => {
+          ctx.fillRect(-rw / 2 - wheelW, offsetY - wheelL / 2, wheelW, wheelL);
+          ctx.strokeRect(-rw / 2 - wheelW, offsetY - wheelL / 2, wheelW, wheelL);
+          ctx.fillRect(rw / 2, offsetY - wheelL / 2, wheelW, wheelL);
+          ctx.strokeRect(rw / 2, offsetY - wheelL / 2, wheelW, wheelL);
         });
 
-        // Dual Cutting Blades at Front
-        ctx.strokeStyle = simPose.bladeOn ? '#ef4444' : '#f97316';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(-rw / 2 + 2, -rl / 2 - 10);
-        ctx.lineTo(rw / 2 - 2, -rl / 2 - 10);
-        ctx.stroke();
-
-        // Heading arrow
-        ctx.fillStyle = '#38bdf8';
-        ctx.beginPath();
-        ctx.moveTo(0, -rl / 2 - 5);
-        ctx.lineTo(-4, -rl / 2 + 2);
-        ctx.lineTo(4, -rl / 2 + 2);
-        ctx.closePath();
-        ctx.fill();
+        // Dual Front Cutting Blades
+        const bladeOffset = 18;
+        const bladeWidth = 16;
+        ctx.fillStyle = simPose.bladeActive ? '#ef4444' : '#f97316';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.fillRect(-bladeWidth / 2, -rl / 2 - bladeOffset + 12, bladeWidth, 4);
+        ctx.strokeRect(-bladeWidth / 2, -rl / 2 - bladeOffset + 12, bladeWidth, 4);
 
         ctx.restore();
       }
     };
-  }, [imageSrc, detections, plan, simPose, layers]);
+  }, [imageSrc, detections, plan, simPose, layers, selectedPlant, calibrator]);
 
   const handleCanvasClick = (e) => {
     const canvas = canvasRef.current;
@@ -245,24 +300,26 @@ export default function CanvasViewer({
       return;
     }
 
-    // Check if clicked inside a plant box for feedback
-    const clickedPlant = detections.find((det) => {
-      const [x1, y1, x2, y2] = det.bbox_px;
-      return clickX >= x1 && clickX <= x2 && clickY >= y1 && clickY <= y2;
-    });
-
-    if (clickedPlant && onWrongDetection) {
-      onWrongDetection(clickedPlant);
+    // Check if clicked inside a plant detection box
+    let clickedDet = null;
+    for (let i = detections.length - 1; i >= 0; i--) {
+      const d = detections[i];
+      const [x1, y1, x2, y2] = d.bbox_px;
+      if (clickX >= x1 && clickX <= x2 && clickY >= y1 && clickY <= y2) {
+        clickedDet = d;
+        break;
+      }
     }
+    setSelectedPlant(clickedDet);
   };
 
   return (
-    <div className="flex flex-col gap-2 relative" ref={containerRef}>
-      {/* Canvas Layer Toggles Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-900/80 backdrop-blur p-2 rounded-lg border border-slate-800 text-xs">
-        <div className="flex items-center gap-2">
-          <Layers className="w-4 h-4 text-slate-400" />
-          <span className="font-semibold text-slate-300">Layers:</span>
+    <div className="flex flex-col gap-3">
+      {/* Layer Visibility Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-900/80 p-2.5 rounded-lg border border-slate-800 text-xs">
+        <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
+          <Layers className="w-4 h-4 text-blue-400" />
+          <span>Indian Field Overlays:</span>
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
@@ -285,7 +342,7 @@ export default function CanvasViewer({
                 : 'bg-slate-800 text-slate-500 border-slate-700'
             }`}
           >
-            Weeds (Red)
+            Actionable Weeds (Red)
           </button>
 
           <button
@@ -300,6 +357,28 @@ export default function CanvasViewer({
           </button>
 
           <button
+            onClick={() => setLayers((l) => ({ ...l, safetyBuffers: !l.safetyBuffers }))}
+            className={`px-2.5 py-1 rounded font-medium border transition ${
+              layers.safetyBuffers
+                ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'
+                : 'bg-slate-800 text-slate-500 border-slate-700'
+            }`}
+          >
+            Safety Rings (5cm)
+          </button>
+
+          <button
+            onClick={() => setLayers((l) => ({ ...l, rejected: !l.rejected }))}
+            className={`px-2.5 py-1 rounded font-medium border transition ${
+              layers.rejected
+                ? 'bg-slate-500/20 text-slate-300 border-slate-500/40'
+                : 'bg-slate-800 text-slate-500 border-slate-700'
+            }`}
+          >
+            Soil / Rejected (Gray)
+          </button>
+
+          <button
             onClick={() => setLayers((l) => ({ ...l, path: !l.path }))}
             className={`px-2.5 py-1 rounded font-medium border transition ${
               layers.path
@@ -307,18 +386,7 @@ export default function CanvasViewer({
                 : 'bg-slate-800 text-slate-500 border-slate-700'
             }`}
           >
-            Path Polyline
-          </button>
-
-          <button
-            onClick={() => setLayers((l) => ({ ...l, footprint: !l.footprint }))}
-            className={`px-2.5 py-1 rounded font-medium border transition ${
-              layers.footprint
-                ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
-                : 'bg-slate-800 text-slate-500 border-slate-700'
-            }`}
-          >
-            Rover Footprint
+            Rover Path
           </button>
 
           <button
@@ -350,10 +418,90 @@ export default function CanvasViewer({
         />
       </div>
 
-      <div className="text-xs text-slate-400 flex items-center justify-between px-1">
-        <span>Click any detection box to report a misclassification for retraining.</span>
-        <span>Origin (0,0): Robot Center | +Y: Forward | +X: Right</span>
-      </div>
+      {/* Selected Plant Telemetry & Inspection Card */}
+      {selectedPlant ? (
+        <div className="bg-slate-900/95 border border-slate-700 p-4 rounded-xl shadow-xl flex flex-col gap-3 text-xs">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div className="flex items-center gap-2">
+              {selectedPlant.status === 'CROP' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+              {selectedPlant.status === 'ACTIONABLE_WEED' && <XCircle className="w-4 h-4 text-rose-400" />}
+              {selectedPlant.status === 'UNCERTAIN' && <AlertTriangle className="w-4 h-4 text-amber-400" />}
+              {selectedPlant.status === 'REJECTED' && <Info className="w-4 h-4 text-slate-400" />}
+              <span className="font-bold text-sm text-white">
+                Plant #{selectedPlant.id}: {selectedPlant.status.replace('_', ' ')}
+              </span>
+            </div>
+            <button
+              onClick={() => setSelectedPlant(null)}
+              className="text-slate-400 hover:text-white text-xs underline"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-slate-300 font-mono">
+            <div className="bg-slate-950 p-2 rounded border border-slate-800">
+              <span className="text-[10px] text-slate-500 block">Botanical Species:</span>
+              <span className="font-semibold text-emerald-300 italic">{selectedPlant.species_name || 'N/A'}</span>
+            </div>
+            <div className="bg-slate-950 p-2 rounded border border-slate-800">
+              <span className="text-[10px] text-slate-500 block">Model Confidence:</span>
+              <span className="font-semibold text-white">{(selectedPlant.confidence * 100).toFixed(1)}%</span>
+            </div>
+            <div className="bg-slate-950 p-2 rounded border border-slate-800">
+              <span className="text-[10px] text-slate-500 block">Canopy Area:</span>
+              <span className="font-semibold text-white">{selectedPlant.area_cm2 ? `${selectedPlant.area_cm2.toFixed(1)} cm²` : `${selectedPlant.area_px.toFixed(0)} px²`}</span>
+            </div>
+            <div className="bg-slate-950 p-2 rounded border border-slate-800">
+              <span className="text-[10px] text-slate-500 block">Distance to Nearest Crop:</span>
+              <span className={`font-semibold ${selectedPlant.dist_to_nearest_crop_cm !== null && selectedPlant.dist_to_nearest_crop_cm < 5.0 ? 'text-amber-400' : 'text-slate-200'}`}>
+                {selectedPlant.dist_to_nearest_crop_cm !== null ? `${selectedPlant.dist_to_nearest_crop_cm.toFixed(1)} cm` : 'No crop nearby'}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950 p-2.5 rounded border border-slate-800 text-[11px]">
+            <div>
+              <span className="text-slate-400">Centroid Coordinates: </span>
+              <span className="font-mono text-sky-400">
+                {selectedPlant.center_cm ? `X: ${selectedPlant.center_cm[0].toFixed(1)} cm, Y: ${selectedPlant.center_cm[1].toFixed(1)} cm` : `px: (${selectedPlant.center_px[0]}, ${selectedPlant.center_px[1]})`}
+              </span>
+            </div>
+
+            <div>
+              <span className="text-slate-400">Blade Action: </span>
+              <span className={`font-bold font-mono px-2 py-0.5 rounded ${
+                selectedPlant.action === 'CUT' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' :
+                selectedPlant.action === 'PROTECT' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' :
+                'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+              }`}>
+                {selectedPlant.action}
+              </span>
+            </div>
+          </div>
+
+          {selectedPlant.rejection_reason && (
+            <div className="bg-amber-950/40 border border-amber-500/30 p-2.5 rounded text-amber-200 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>Safety Note: {selectedPlant.rejection_reason}</span>
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <button
+              onClick={() => onWrongDetection && onWrongDetection(selectedPlant)}
+              className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs transition"
+            >
+              Report Misclassification for Active Learning
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="text-xs text-slate-400 flex items-center justify-between px-1">
+          <span>Click any plant detection box to inspect botanical species, area, and crop distance.</span>
+          <span>Green = Crop (5cm safety buffer) | Red = Actionable Weed | Yellow = Protected/Uncertain</span>
+        </div>
+      )}
     </div>
   );
 }

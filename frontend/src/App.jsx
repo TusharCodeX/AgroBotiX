@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, AlertCircle, XCircle } from 'lucide-react';
 import Navbar from './components/Navbar';
 import CanvasViewer from './components/CanvasViewer';
 import ControlPanel from './components/ControlPanel';
@@ -17,7 +17,15 @@ export default function App() {
   // Backend Health & Config State
   const [health, setHealth] = useState(null);
   const [config, setConfig] = useState(null);
+  const [availableCrops, setAvailableCrops] = useState([]);
   const [showOfflineBanner, setShowOfflineBanner] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(null);
+
+  // Indian Agronomic Perception Parameters
+  const [selectedCropContext, setSelectedCropContext] = useState('wheat');
+  const [candidateThreshold, setCandidateThreshold] = useState(0.70);
+  const [uncertainMin, setUncertainMin] = useState(0.50);
+  const [safetyBufferCm, setSafetyBufferCm] = useState(5.0);
 
   // Vision & Planning State
   const [imageSrc, setImageSrc] = useState(null);
@@ -60,7 +68,7 @@ export default function App() {
         setShowOfflineBanner(true);
       }
     } catch (e) {
-      console.warn('Backend offline or not reachable, using Vercel Cloud Demo mode:', e);
+      console.warn('Backend offline or not reachable:', e);
       setHealth(null);
       setShowOfflineBanner(true);
     }
@@ -78,180 +86,38 @@ export default function App() {
     }
   };
 
+  const fetchCrops = async () => {
+    try {
+      const res = await fetch(getApiUrl('/api/crops'));
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableCrops(data.crops || []);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch Indian crop profiles:', e);
+    }
+  };
+
   useEffect(() => {
     fetchHealth();
     fetchConfig();
-
-    // Create an initial sample synthetic image so the app is immediately testable
-    createInitialSyntheticField();
+    fetchCrops();
   }, []);
-
-  const createInitialSyntheticField = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1000;
-    canvas.height = 600;
-    const ctx = canvas.getContext('2d');
-
-    // Soil
-    ctx.fillStyle = '#453823';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Subtle soil texture
-    for (let i = 0; i < 400; i++) {
-      ctx.fillStyle = i % 2 === 0 ? '#382d1b' : '#52432a';
-      ctx.beginPath();
-      ctx.arc(Math.random() * canvas.width, Math.random() * canvas.height, Math.random() * 3, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // 2 Crops (large green circles)
-    ctx.fillStyle = '#22c55e';
-    ctx.beginPath();
-    ctx.arc(300, 240, 50, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#16a34a';
-    ctx.beginPath();
-    ctx.arc(300, 240, 35, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#22c55e';
-    ctx.beginPath();
-    ctx.arc(700, 240, 55, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#16a34a';
-    ctx.beginPath();
-    ctx.arc(700, 240, 40, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 2 Weeds (smaller irregular red/yellowish green patches)
-    ctx.fillStyle = '#4ade80';
-    ctx.beginPath();
-    ctx.arc(500, 380, 25, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#86efac';
-    ctx.beginPath();
-    ctx.arc(350, 480, 20, 0, Math.PI * 2);
-    ctx.fill();
-
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-    handleImageCaptured(dataUrl, false);
-  };
-
-  // Client-side fallback detection simulation when deployed on Vercel without active backend
-  const simulateClientDetections = () => {
-    const mockDetections = [
-      {
-        id: 1,
-        class_id: 0,
-        raw_class_name: 'crop',
-        status: 'CROP',
-        confidence: 0.942,
-        bbox_px: [250, 190, 350, 290],
-        center_px: [300, 240],
-        center_cm: [-15.0, 54.0],
-        bbox_cm: [-22.5, 46.5, -7.5, 61.5],
-        is_obstacle: true,
-        is_target: false,
-      },
-      {
-        id: 2,
-        class_id: 0,
-        raw_class_name: 'crop',
-        status: 'CROP',
-        confidence: 0.915,
-        bbox_px: [645, 185, 755, 295],
-        center_px: [700, 240],
-        center_cm: [15.0, 54.0],
-        bbox_cm: [6.75, 45.75, 23.25, 62.25],
-        is_obstacle: true,
-        is_target: false,
-      },
-      {
-        id: 3,
-        class_id: 1,
-        raw_class_name: 'weed',
-        status: 'WEED',
-        confidence: 0.884,
-        bbox_px: [475, 355, 525, 405],
-        center_px: [500, 380],
-        center_cm: [0.0, 33.0],
-        bbox_cm: [-3.75, 29.25, 3.75, 36.75],
-        is_obstacle: false,
-        is_target: true,
-      },
-      {
-        id: 4,
-        class_id: 1,
-        raw_class_name: 'weed',
-        status: 'WEED',
-        confidence: 0.826,
-        bbox_px: [330, 460, 370, 500],
-        center_px: [350, 480],
-        center_cm: [-11.2, 18.0],
-        bbox_cm: [-14.2, 15.0, -8.2, 21.0],
-        is_obstacle: false,
-        is_target: true,
-      },
-    ];
-
-    setDetections(mockDetections);
-    setDetectionStats({
-      inference_time_ms: 18.5,
-      fps: 54.0,
-      demo_mode: true,
-      total_plants: 4,
-    });
-  };
-
-  // Client-side fallback planning simulation when deployed on Vercel without active backend
-  const simulateClientPlan = () => {
-    const mockPlan = {
-      success: true,
-      total_distance_cm: 64.2,
-      total_turns: 4,
-      estimated_time_s: 10.3,
-      handled_weeds: [4, 3],
-      skipped_weeds: [],
-      total_weeds: 2,
-      path: [
-        { x: 0.0, y: 0.0, heading: 0 },
-        { x: 0.0, y: 8.0, heading: 0 },
-        { x: 0.0, y: 8.0, heading: 3 },
-        { x: -11.2, y: 8.0, heading: 3 },
-        { x: -11.2, y: 8.0, heading: 0 },
-        { x: -11.2, y: 10.0, heading: 0 },
-        { x: -11.2, y: 10.0, heading: 1 },
-        { x: 0.0, y: 10.0, heading: 1 },
-        { x: 0.0, y: 10.0, heading: 0 },
-        { x: 0.0, y: 23.0, heading: 0 },
-      ],
-      commands: [
-        { seq: 1, action: 'FORWARD', dist_cm: 8.0, blade_active: false, raw: 'F80' },
-        { seq: 2, action: 'TURN_LEFT', angle_deg: 90, blade_active: false, raw: 'TL90' },
-        { seq: 3, action: 'FORWARD', dist_cm: 11.2, blade_active: false, raw: 'F112' },
-        { seq: 4, action: 'TURN_RIGHT', angle_deg: 90, blade_active: false, raw: 'TR90' },
-        { seq: 5, action: 'FORWARD', dist_cm: 2.0, blade_active: false, raw: 'F20' },
-        { seq: 6, action: 'CUT', target_weed_id: 4, blade_active: true, raw: 'CUT4' },
-        { seq: 7, action: 'TURN_RIGHT', angle_deg: 90, blade_active: false, raw: 'TR90' },
-        { seq: 8, action: 'FORWARD', dist_cm: 11.2, blade_active: false, raw: 'F112' },
-        { seq: 9, action: 'TURN_LEFT', angle_deg: 90, blade_active: false, raw: 'TL90' },
-        { seq: 10, action: 'FORWARD', dist_cm: 13.0, blade_active: false, raw: 'F130' },
-        { seq: 11, action: 'CUT', target_weed_id: 3, blade_active: true, raw: 'CUT3' },
-      ],
-    };
-    setPlan(mockPlan);
-  };
 
   const handleImageCaptured = async (dataUrl, isLive = false) => {
     setImageSrc(dataUrl);
     setIsDetecting(true);
     setPlan(null);
+    setErrorMessage(null);
 
     try {
       const formData = new FormData();
       formData.append('image_base64', dataUrl);
       formData.append('is_live', isLive ? 'true' : 'false');
+      formData.append('crop_context', selectedCropContext);
+      formData.append('candidate_threshold', candidateThreshold.toString());
+      formData.append('uncertain_min', uncertainMin.toString());
+      formData.append('safety_buffer_cm', safetyBufferCm.toString());
 
       const res = await fetch(getApiUrl('/api/detect'), {
         method: 'POST',
@@ -259,7 +125,12 @@ export default function App() {
       });
 
       if (!res.ok) {
-        throw new Error(`Detection request failed: ${res.status}`);
+        let msg = `Detection request failed: HTTP ${res.status}`;
+        try {
+          const errData = await res.json();
+          if (errData.detail) msg = errData.detail;
+        } catch (_) {}
+        throw new Error(msg);
       }
 
       const result = await res.json();
@@ -267,13 +138,15 @@ export default function App() {
       setDetectionStats({
         inference_time_ms: result.inference_time_ms,
         fps: result.fps,
-        demo_mode: result.demo_mode,
+        demo_mode: false,
         total_plants: result.total_plants,
       });
       fetchHealth();
     } catch (err) {
-      console.warn('Backend unavailable, using client-side simulation:', err);
-      simulateClientDetections();
+      console.error('Detection error:', err);
+      // Strictly do NOT generate fake mock boxes!
+      setDetections([]);
+      setErrorMessage(err.message || 'Detection failed. Ensure backend YOLOv8 ONNX model is running.');
     } finally {
       setIsDetecting(false);
     }
@@ -286,6 +159,7 @@ export default function App() {
     }
 
     setIsPlanning(true);
+    setErrorMessage(null);
     try {
       const res = await fetch(getApiUrl('/api/plan'), {
         method: 'POST',
@@ -298,14 +172,19 @@ export default function App() {
       });
 
       if (!res.ok) {
-        throw new Error(`Path planning failed: ${res.status}`);
+        let msg = `Path planning failed: HTTP ${res.status}`;
+        try {
+          const errData = await res.json();
+          if (errData.detail) msg = errData.detail;
+        } catch (_) {}
+        throw new Error(msg);
       }
 
       const planData = await res.json();
       setPlan(planData);
     } catch (err) {
-      console.warn('Backend planner unavailable, using client-side kinematics simulation:', err);
-      simulateClientPlan();
+      console.error('Path planning error:', err);
+      alert(`Path planning error: ${err.message}`);
     } finally {
       setIsPlanning(false);
     }
@@ -396,6 +275,9 @@ export default function App() {
         toggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
         onOpenSettings={() => setShowSettings(true)}
         onOpenCalibration={() => setShowCalibration(true)}
+        selectedCropContext={selectedCropContext}
+        onCropContextChange={setSelectedCropContext}
+        availableCrops={availableCrops}
       />
 
       {showOfflineBanner && !health && (
@@ -403,7 +285,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
             <span>
-              <strong>Vercel Cloud Demo Mode:</strong> The trained YOLOv8 AI model runs on the Python backend (not hosted inside Vercel static hosting). You are seeing simulated demo boxes. Run locally at <code className="bg-amber-900/60 px-1.5 py-0.5 rounded text-white font-mono">http://localhost:8000</code> or enter your backend URL in Settings (⚙️).
+              <strong>Model Backend Offline:</strong> Real neural network inference and Indian field safety validation requires the Python FastAPI backend. Connect backend at <code className="bg-amber-900/60 px-1.5 py-0.5 rounded text-white font-mono">http://localhost:8000</code> or set URL in Settings (⚙️). Fake/mock detections are strictly disabled.
             </span>
           </div>
           <button
@@ -412,6 +294,20 @@ export default function App() {
           >
             Connect Backend (⚙️)
           </button>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="max-w-7xl mx-auto mt-3 px-4">
+          <div className="bg-rose-950/80 border border-rose-500/50 text-rose-200 px-4 py-2.5 rounded-lg text-xs flex items-center justify-between gap-2 shadow">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span><strong>Inference Error:</strong> {errorMessage}</span>
+            </div>
+            <button onClick={() => setErrorMessage(null)} className="text-rose-400 hover:text-white">
+              <XCircle className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -429,6 +325,8 @@ export default function App() {
                 onTwoPointClick={handleTwoPointCanvasClick}
                 onWrongDetection={(plant) => setSelectedPlantFeedback(plant)}
                 calibrator={health?.calibration}
+                cropContext={selectedCropContext}
+                safetyBufferCm={safetyBufferCm}
               />
 
               {plan && (
@@ -448,6 +346,14 @@ export default function App() {
                 isPlanning={isPlanning}
                 detectionStats={detectionStats}
                 planStats={plan}
+                selectedCropContext={selectedCropContext}
+                candidateThreshold={candidateThreshold}
+                onCandidateThresholdChange={setCandidateThreshold}
+                uncertainMin={uncertainMin}
+                onUncertainMinChange={setUncertainMin}
+                safetyBufferCm={safetyBufferCm}
+                onSafetyBufferCmChange={setSafetyBufferCm}
+                health={health}
               />
 
               <CommandsList plan={plan} />

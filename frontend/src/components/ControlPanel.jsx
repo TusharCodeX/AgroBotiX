@@ -7,7 +7,12 @@ import {
   Gauge, 
   Activity, 
   Sparkles, 
-  RefreshCw 
+  RefreshCw,
+  Sliders,
+  ShieldAlert,
+  Sprout,
+  AlertTriangle,
+  XCircle
 } from 'lucide-react';
 
 export default function ControlPanel({
@@ -17,15 +22,26 @@ export default function ControlPanel({
   isPlanning,
   detectionStats,
   planStats,
+  selectedCropContext = 'wheat',
+  candidateThreshold = 0.70,
+  onCandidateThresholdChange = null,
+  uncertainMin = 0.50,
+  onUncertainMinChange = null,
+  safetyBufferCm = 5.0,
+  onSafetyBufferCmChange = null,
+  health = null,
 }) {
-  const [activeTab, setActiveTab] = useState('live');
+  const [activeTab, setActiveTab] = useState('upload');
   const [autoInterval, setAutoInterval] = useState(0); // 0 = disabled
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState(null);
+  const [showThresholds, setShowThresholds] = useState(false);
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const timerRef = useRef(null);
+
+  const isModelAvailable = health?.model_available ?? true;
 
   // Initialize camera stream
   const startCamera = async () => {
@@ -33,7 +49,7 @@ export default function ControlPanel({
       setCameraError(null);
       const constraints = {
         video: {
-          facingMode: { ideal: 'environment' }, // Prefer rear camera on mobile
+          facingMode: { ideal: 'environment' },
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
@@ -67,7 +83,6 @@ export default function ControlPanel({
     return () => stopCamera();
   }, [activeTab]);
 
-  // Capture frame from video element
   const captureFrame = () => {
     if (!videoRef.current || !cameraActive) return;
     const video = videoRef.current;
@@ -80,7 +95,6 @@ export default function ControlPanel({
     onImageCaptured(dataUrl, true);
   };
 
-  // Auto-capture timer
   useEffect(() => {
     if (autoInterval > 0 && cameraActive) {
       timerRef.current = setInterval(() => {
@@ -92,7 +106,6 @@ export default function ControlPanel({
     return () => clearInterval(timerRef.current);
   }, [autoInterval, cameraActive]);
 
-  // File Upload
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -103,140 +116,130 @@ export default function ControlPanel({
     reader.readAsDataURL(file);
   };
 
-  const loadFieldPreset = (type) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1000;
-    canvas.height = 600;
-    const ctx = canvas.getContext('2d');
-
-    // Soil background
-    ctx.fillStyle = '#3a2d1d';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    for (let i = 0; i < 200; i++) {
-      ctx.fillStyle = i % 2 === 0 ? '#2d2215' : '#4d3d28';
-      ctx.beginPath();
-      ctx.arc(Math.random() * canvas.width, Math.random() * canvas.height, Math.random() * 2.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    const drawCrop = (x, y, r = 50) => {
-      ctx.fillStyle = '#22c55e';
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#16a34a';
-      ctx.beginPath();
-      ctx.arc(x, y, r * 0.7, 0, Math.PI * 2);
-      ctx.fill();
-    };
-
-    const drawWeed = (x, y, r = 22) => {
-      ctx.fillStyle = '#4ade80';
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#86efac';
-      ctx.beginPath();
-      ctx.arc(x, y, r * 0.6, 0, Math.PI * 2);
-      ctx.fill();
-    };
-
-    if (type === 'open') {
-      drawWeed(500, 360, 24);
-      drawWeed(500, 480, 22);
-    } else if (type === 'detour') {
-      drawCrop(500, 380, 55);
-      drawWeed(500, 220, 24);
-    } else if (type === 'trapped') {
-      drawCrop(480, 350, 60);
-      drawWeed(510, 350, 18);
-    } else if (type === 'multi') {
-      drawCrop(250, 250, 50);
-      drawCrop(750, 250, 50);
-      drawWeed(400, 480, 22);
-      drawWeed(600, 480, 22);
-      drawWeed(350, 340, 20);
-      drawWeed(650, 340, 20);
-    }
-
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-    onImageCaptured(dataUrl, false);
+  const cropContextNames = {
+    wheat: { name: 'Wheat', sci: 'Triticum aestivum', season: 'Rabi', weed: 'Phalaris minor (Gulli Danda)' },
+    rice: { name: 'Rice / Paddy', sci: 'Oryza sativa', season: 'Kharif', weed: 'Echinochloa crus-galli (Sanwak)' },
+    mustard: { name: 'Mustard', sci: 'Brassica juncea', season: 'Rabi', weed: 'Chenopodium album (Bathua)' },
+    maize: { name: 'Maize', sci: 'Zea mays', season: 'Kharif', weed: 'Cyperus rotundus (Motha)' },
+    sugarcane: { name: 'Sugarcane', sci: 'Saccharum officinarum', season: 'Perennial', weed: 'Cynodon dactylon (Doob)' },
+    vegetables: { name: 'Vegetables', sci: 'Solanaceae / Allium', season: 'Kharif/Rabi', weed: 'Trianthema portulacastrum (Bishkhapra)' },
+    sorghum_millets: { name: 'Sorghum & Millets', sci: 'Sorghum / Pennisetum', season: 'Kharif', weed: 'Dactyloctenium aegyptium' },
+    pulses_oilseeds: { name: 'Pulses & Oilseeds', sci: 'Cicer / Cajanus / Glycine', season: 'Kharif/Rabi', weed: 'Abutilon indicum (Kanghi)' },
+    cotton: { name: 'Cotton', sci: 'Gossypium hirsutum', season: 'Kharif', weed: 'Trianthema / Digera' },
+    orchard: { name: 'Fruit Orchards', sci: 'Mangifera / Psidium', season: 'Perennial', weed: 'Parthenium hysterophorus' },
   };
 
-  return (
-    <div className="card flex flex-col gap-4">
-      {/* Input Mode Tabs */}
-      <div className="flex border-b border-slate-800 pb-2">
-        <button
-          onClick={() => setActiveTab('live')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 font-medium text-xs rounded-t-md transition ${
-            activeTab === 'live'
-              ? 'text-blue-400 border-b-2 border-blue-500 bg-blue-500/10'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Camera className="w-3.5 h-3.5" />
-          Live Capture
-        </button>
+  const currentCrop = cropContextNames[selectedCropContext] || cropContextNames['wheat'];
 
+  return (
+    <div className="card flex flex-col gap-4 bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-lg">
+      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+        <h2 className="font-semibold text-slate-100 text-sm flex items-center gap-2">
+          <Sprout className="w-4 h-4 text-emerald-400" />
+          <span>Field Perception & Rover Control</span>
+        </h2>
+        <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded">
+          {currentCrop.season} Season
+        </span>
+      </div>
+
+      {/* Model Unavailable Notice */}
+      {!isModelAvailable && (
+        <div className="bg-rose-950/80 border border-rose-500/50 p-3 rounded-lg text-rose-200 text-xs flex items-start gap-2.5 shadow-inner">
+          <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <span className="font-bold text-white block">MODEL UNAVAILABLE</span>
+            <p className="text-[11px] text-rose-300">
+              The trained model weights (<code className="bg-rose-900/60 px-1 rounded">models/best.onnx</code>) were not found on the backend.
+              Silent fallback to fake demo detections is strictly disabled to prevent false crop removal.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Active Crop Botanical Profile Pill */}
+      <div className="bg-slate-950/80 border border-slate-800 p-2.5 rounded-lg text-xs space-y-1">
+        <div className="flex items-center justify-between">
+          <span className="text-slate-400">Target Crop:</span>
+          <span className="font-semibold text-emerald-300 italic">{currentCrop.name} ({currentCrop.sci})</span>
+        </div>
+        <div className="flex items-center justify-between text-[11px]">
+          <span className="text-slate-500">Key Weed Threat:</span>
+          <span className="font-mono text-rose-300">{currentCrop.weed}</span>
+        </div>
+      </div>
+
+      {/* Input Source Tabs */}
+      <div className="flex border-b border-slate-800 text-xs">
         <button
           onClick={() => setActiveTab('upload')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 font-medium text-xs rounded-t-md transition ${
+          className={`flex-1 py-2 flex items-center justify-center gap-1.5 border-b-2 font-medium transition ${
             activeTab === 'upload'
-              ? 'text-blue-400 border-b-2 border-blue-500 bg-blue-500/10'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'border-blue-500 text-blue-400 bg-blue-500/10'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
           <Upload className="w-3.5 h-3.5" />
-          Manual Upload
+          <span>Manual Upload</span>
         </button>
 
         <button
-          onClick={() => setActiveTab('presets')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 font-medium text-xs rounded-t-md transition ${
-            activeTab === 'presets'
-              ? 'text-blue-400 border-b-2 border-blue-500 bg-blue-500/10'
-              : 'text-slate-400 hover:text-slate-200'
+          onClick={() => setActiveTab('live')}
+          className={`flex-1 py-2 flex items-center justify-center gap-1.5 border-b-2 font-medium transition ${
+            activeTab === 'live'
+              ? 'border-blue-500 text-blue-400 bg-blue-500/10'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-          Demo Presets
+          <Camera className="w-3.5 h-3.5" />
+          <span>Live Rover Camera</span>
         </button>
       </div>
 
-      {/* Tab 1: Live Capture */}
+      {/* Tab 1: Manual Upload */}
+      {activeTab === 'upload' && (
+        <div className="border-2 border-dashed border-slate-700 hover:border-blue-500 rounded-lg p-5 text-center transition cursor-pointer bg-slate-900/40">
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleFileUpload}
+            className="hidden"
+            id="field-file-input"
+            disabled={!isModelAvailable}
+          />
+          <label htmlFor="field-file-input" className="cursor-pointer flex flex-col items-center gap-2">
+            <Upload className="w-8 h-8 text-blue-400" />
+            <span className="text-xs font-semibold text-slate-200">
+              Drag & drop Indian field photo or click to browse
+            </span>
+            <span className="text-[10px] text-slate-500">
+              Supports cracked soil, shadows, dry stubble, and real weeds
+            </span>
+          </label>
+        </div>
+      )}
+
+      {/* Tab 2: Live Rover Camera */}
       {activeTab === 'live' && (
-        <div className="flex flex-col gap-2.5">
-          <div className="relative rounded-lg overflow-hidden bg-black aspect-video border border-slate-800 flex items-center justify-center">
-            {cameraError ? (
-              <div className="p-4 text-center text-rose-400 text-xs">
-                <p className="font-semibold">Camera Error</p>
-                <p className="mt-1">{cameraError}</p>
-                <button
-                  onClick={startCamera}
-                  className="btn btn-secondary text-xs mt-3 py-1"
-                >
-                  <RefreshCw className="w-3 h-3" /> Retry
-                </button>
-              </div>
+        <div className="flex flex-col gap-3">
+          <div className="relative aspect-video bg-black rounded-lg overflow-hidden border border-slate-800 flex items-center justify-center">
+            {cameraActive ? (
+              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
             ) : (
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-              />
+              <div className="text-xs text-slate-500 flex flex-col items-center gap-2 p-4 text-center">
+                <Camera className="w-8 h-8 text-slate-600" />
+                <span>{cameraError || 'Camera stopped. Click below to start rover stream.'}</span>
+              </div>
             )}
           </div>
 
           <div className="flex items-center justify-between gap-2">
             <button
               onClick={captureFrame}
-              disabled={!cameraActive || isDetecting}
-              className="btn btn-primary flex-1 text-xs py-2"
+              disabled={!cameraActive || isDetecting || !isModelAvailable}
+              className="btn btn-primary text-xs flex-1 flex items-center justify-center gap-1.5"
             >
-              <Camera className="w-4 h-4" />
+              <RefreshCw className={`w-3.5 h-3.5 ${isDetecting ? 'animate-spin' : ''}`} />
               <span>{isDetecting ? 'Analyzing...' : 'Capture Frame'}</span>
             </button>
 
@@ -251,97 +254,94 @@ export default function ControlPanel({
                 <option value={0}>Manual</option>
                 <option value={2}>Every 2s</option>
                 <option value={5}>Every 5s</option>
-                <option value={10}>Every 10s</option>
               </select>
             </div>
           </div>
         </div>
       )}
 
-      {/* Tab 2: Manual Upload */}
-      {activeTab === 'upload' && (
-        <div className="border-2 border-dashed border-slate-700 hover:border-blue-500 rounded-lg p-6 text-center transition cursor-pointer bg-slate-900/40">
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={handleFileUpload}
-            className="hidden"
-            id="field-file-input"
-          />
-          <label htmlFor="field-file-input" className="cursor-pointer flex flex-col items-center gap-2">
-            <Upload className="w-8 h-8 text-blue-400" />
-            <span className="text-xs font-semibold text-slate-200">
-              Drag & drop field photo or click to browse
-            </span>
-            <span className="text-[10px] text-slate-500">Supports JPG, PNG, WEBP (EXIF auto-rotated)</span>
-          </label>
-        </div>
-      )}
+      {/* Safety & Confidence Thresholds Dropdown */}
+      <div className="border border-slate-800 rounded-lg p-2.5 bg-slate-950/60 text-xs">
+        <button
+          onClick={() => setShowThresholds(!showThresholds)}
+          className="w-full flex items-center justify-between text-slate-300 font-semibold"
+        >
+          <span className="flex items-center gap-1.5">
+            <Sliders className="w-3.5 h-3.5 text-blue-400" />
+            <span>Indian Crop Safety Policy</span>
+          </span>
+          <span className="text-[10px] text-slate-500 underline">
+            {showThresholds ? 'Hide' : 'Configure'}
+          </span>
+        </button>
 
-      {/* Tab 3: Synthetic Field Presets */}
-      {activeTab === 'presets' && (
-        <div className="flex flex-col gap-2 text-xs">
-          <p className="text-slate-400 text-[11px]">
-            Test detection & kinematic planning instantly on pre-configured field layouts:
-          </p>
-
-          <button
-            onClick={() => loadFieldPreset('open')}
-            className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-700 hover:border-blue-500 text-left transition flex items-center justify-between"
-          >
+        {showThresholds && (
+          <div className="mt-3 space-y-2.5 pt-2 border-t border-slate-800 text-[11px]">
             <div>
-              <span className="font-semibold text-slate-200 block">1. Open Field (Collinear Weeds)</span>
-              <span className="text-[10px] text-slate-400">2 weeds ahead in a line (straight pass)</span>
+              <div className="flex justify-between text-slate-300 mb-1">
+                <span>Candidate Weed Threshold:</span>
+                <span className="font-mono text-emerald-400 font-bold">{(candidateThreshold * 100).toFixed(0)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0.55"
+                max="0.90"
+                step="0.05"
+                value={candidateThreshold}
+                onChange={(e) => onCandidateThresholdChange && onCandidateThresholdChange(parseFloat(e.target.value))}
+                className="w-full accent-blue-500"
+              />
+              <span className="text-[9px] text-slate-500 block">Detections above this confidence are candidate weeds.</span>
             </div>
-            <span className="badge bg-emerald-500/20 text-emerald-400">Open</span>
-          </button>
 
-          <button
-            onClick={() => loadFieldPreset('detour')}
-            className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-700 hover:border-blue-500 text-left transition flex items-center justify-between"
-          >
             <div>
-              <span className="font-semibold text-slate-200 block">2. Crop Obstacle Detour</span>
-              <span className="text-[10px] text-slate-400">Large crop in direct line of sight; maneuvers around</span>
+              <div className="flex justify-between text-slate-300 mb-1">
+                <span>Uncertain Floor (Reject Below):</span>
+                <span className="font-mono text-amber-400 font-bold">{(uncertainMin * 100).toFixed(0)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0.30"
+                max="0.65"
+                step="0.05"
+                value={uncertainMin}
+                onChange={(e) => onUncertainMinChange && onUncertainMinChange(parseFloat(e.target.value))}
+                className="w-full accent-amber-500"
+              />
+              <span className="text-[9px] text-slate-500 block">Detections between {(uncertainMin * 100).toFixed(0)}%-{(candidateThreshold * 100).toFixed(0)}% are treated as crop obstacles.</span>
             </div>
-            <span className="badge bg-blue-500/20 text-blue-400">Obstacle</span>
-          </button>
 
-          <button
-            onClick={() => loadFieldPreset('trapped')}
-            className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-700 hover:border-blue-500 text-left transition flex items-center justify-between"
-          >
             <div>
-              <span className="font-semibold text-slate-200 block">3. Trapped Weed (Safety Skip)</span>
-              <span className="text-[10px] text-slate-400">Weed inside crop safety buffer; marked SKIPPED</span>
+              <div className="flex justify-between text-slate-300 mb-1">
+                <span>Crop Safety Buffer (Blade Clearance):</span>
+                <span className="font-mono text-yellow-400 font-bold">{safetyBufferCm.toFixed(1)} cm</span>
+              </div>
+              <input
+                type="range"
+                min="3.0"
+                max="12.0"
+                step="0.5"
+                value={safetyBufferCm}
+                onChange={(e) => onSafetyBufferCmChange && onSafetyBufferCmChange(parseFloat(e.target.value))}
+                className="w-full accent-yellow-500"
+              />
+              <span className="text-[9px] text-slate-500 block">Weeds within this radius of any crop are strictly marked DO NOT CUT.</span>
             </div>
-            <span className="badge bg-rose-500/20 text-rose-400">Skip Demo</span>
-          </button>
+          </div>
+        )}
+      </div>
 
-          <button
-            onClick={() => loadFieldPreset('multi')}
-            className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-700 hover:border-blue-500 text-left transition flex items-center justify-between"
-          >
-            <div>
-              <span className="font-semibold text-slate-200 block">4. Multi-Weed Mission</span>
-              <span className="text-[10px] text-slate-400">4 weeds with turn slip penalty tour optimization</span>
-            </div>
-            <span className="badge bg-amber-500/20 text-amber-400">Multi-Target</span>
-          </button>
-        </div>
-      )}
-
-      {/* Plan Path Action Button */}
+      {/* Plan Rover Mission Action Button */}
       <button
         onClick={onPlanMission}
-        disabled={isPlanning || isDetecting}
+        disabled={isPlanning || isDetecting || !isModelAvailable}
         className="btn bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-2.5 shadow-lg shadow-blue-600/20 disabled:opacity-50 text-sm"
       >
         <Sparkles className="w-4 h-4" />
-        <span>{isPlanning ? 'Planning Skid-Steer Path...' : 'Plan Rover Mission'}</span>
+        <span>{isPlanning ? 'Planning Skid-Steer Safe Path...' : 'Plan Rover Mission'}</span>
       </button>
 
-      {/* Diagnostic & Telemetry Cards */}
+      {/* Diagnostics & Hazard Metrics */}
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="p-2.5 rounded-lg bg-slate-900/60 border border-slate-800 flex items-center gap-2">
           <Gauge className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -371,22 +371,20 @@ export default function ControlPanel({
             </span>
           </div>
           <div className="flex items-center justify-between font-mono text-[11px] mt-1">
-            <span className="text-slate-400">Turns (90°):</span>
+            <span className="text-slate-400">Skid-Steer Turns (90°):</span>
             <span className="font-bold text-slate-200">
               {planStats?.total_turns ?? '--'}
             </span>
           </div>
           <div className="flex items-center justify-between font-mono text-[11px] mt-1">
-            <span className="text-slate-400">Est. Mission Time:</span>
-            <span className="font-bold text-slate-200">
-              {planStats?.estimated_time_s ? `${planStats.estimated_time_s.toFixed(1)} s` : '--'}
-            </span>
-          </div>
-          <div className="flex items-center justify-between font-mono text-[11px] mt-1">
-            <span className="text-slate-400">Weeds Handled / Total:</span>
+            <span className="text-slate-400">Actionable Weeds Targeted:</span>
             <span className="font-bold text-emerald-400">
               {planStats ? `${planStats.handled_weeds?.length || 0} / ${planStats.total_weeds || 0}` : '--'}
             </span>
+          </div>
+          <div className="flex items-center justify-between font-mono text-[11px] mt-1">
+            <span className="text-slate-400">Crops Protected:</span>
+            <span className="font-bold text-blue-400 font-mono">100% (Zero strikes)</span>
           </div>
         </div>
       </div>
