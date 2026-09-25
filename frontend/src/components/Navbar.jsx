@@ -2,7 +2,6 @@ import React from 'react';
 import { 
   Bot, 
   Settings, 
-  BarChart2, 
   Sun, 
   Moon, 
   Compass, 
@@ -14,8 +13,6 @@ import {
 
 export default function Navbar({ 
   health, 
-  currentTab, 
-  setCurrentTab, 
   theme, 
   toggleTheme, 
   onOpenSettings, 
@@ -101,29 +98,6 @@ export default function Navbar({
 
         {/* Navigation & Controls */}
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setCurrentTab('perception')}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${
-              currentTab === 'perception'
-                ? 'bg-blue-600 text-white shadow'
-                : 'text-slate-300 hover:bg-slate-800'
-            }`}
-          >
-            Mission Field
-          </button>
-
-          <button
-            onClick={() => setCurrentTab('evaluation')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition ${
-              currentTab === 'evaluation'
-                ? 'bg-blue-600 text-white shadow'
-                : 'text-slate-300 hover:bg-slate-800'
-            }`}
-          >
-            <BarChart2 className="w-4 h-4" />
-            Evaluation
-          </button>
-
           <button
             onClick={onOpenSettings}
             title="Rover & Vision Settings"

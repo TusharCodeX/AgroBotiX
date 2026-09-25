@@ -8,11 +8,9 @@ import SimulationPlayer from './components/SimulationPlayer';
 import CalibrationModal from './components/CalibrationModal';
 import SettingsModal from './components/SettingsModal';
 import FeedbackModal from './components/FeedbackModal';
-import EvaluationView from './components/EvaluationView';
 
 export default function App() {
   const [theme, setTheme] = useState('dark');
-  const [currentTab, setCurrentTab] = useState('perception');
 
   // Backend Health & Config State
   const [health, setHealth] = useState(null);
@@ -269,8 +267,6 @@ export default function App() {
     <div className={`min-h-screen ${theme === 'light' ? 'light-theme' : ''}`}>
       <Navbar
         health={health}
-        currentTab={currentTab}
-        setCurrentTab={setCurrentTab}
         theme={theme}
         toggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
         onOpenSettings={() => setShowSettings(true)}
@@ -312,56 +308,52 @@ export default function App() {
       )}
 
       <main className="max-w-7xl mx-auto p-4">
-        {currentTab === 'perception' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-            {/* Left / Center Column: Field Canvas Viewer & Simulation */}
-            <div className="lg:col-span-8 flex flex-col gap-4">
-              <CanvasViewer
-                imageSrc={imageSrc}
-                detections={detections}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Left / Center Column: Field Canvas Viewer & Simulation */}
+          <div className="lg:col-span-8 flex flex-col gap-4">
+            <CanvasViewer
+              imageSrc={imageSrc}
+              detections={detections}
+              plan={plan}
+              simPose={simPose}
+              calibratingTwoPoint={calibratingTwoPoint}
+              onTwoPointClick={handleTwoPointCanvasClick}
+              onWrongDetection={(plant) => setSelectedPlantFeedback(plant)}
+              calibrator={health?.calibration}
+              cropContext={selectedCropContext}
+              safetyBufferCm={safetyBufferCm}
+            />
+
+            {plan && (
+              <SimulationPlayer
                 plan={plan}
-                simPose={simPose}
-                calibratingTwoPoint={calibratingTwoPoint}
-                onTwoPointClick={handleTwoPointCanvasClick}
-                onWrongDetection={(plant) => setSelectedPlantFeedback(plant)}
-                calibrator={health?.calibration}
-                cropContext={selectedCropContext}
-                safetyBufferCm={safetyBufferCm}
+                onPoseUpdate={(pose) => setSimPose(pose)}
               />
-
-              {plan && (
-                <SimulationPlayer
-                  plan={plan}
-                  onPoseUpdate={(pose) => setSimPose(pose)}
-                />
-              )}
-            </div>
-
-            {/* Right Column: Perception Inputs, Mission Control & Command Queue */}
-            <div className="lg:col-span-4 flex flex-col gap-4">
-              <ControlPanel
-                onImageCaptured={handleImageCaptured}
-                onPlanMission={handlePlanMission}
-                isDetecting={isDetecting}
-                isPlanning={isPlanning}
-                detectionStats={detectionStats}
-                planStats={plan}
-                selectedCropContext={selectedCropContext}
-                candidateThreshold={candidateThreshold}
-                onCandidateThresholdChange={setCandidateThreshold}
-                uncertainMin={uncertainMin}
-                onUncertainMinChange={setUncertainMin}
-                safetyBufferCm={safetyBufferCm}
-                onSafetyBufferCmChange={setSafetyBufferCm}
-                health={health}
-              />
-
-              <CommandsList plan={plan} />
-            </div>
+            )}
           </div>
-        ) : (
-          <EvaluationView />
-        )}
+
+          {/* Right Column: Perception Inputs, Mission Control & Command Queue */}
+          <div className="lg:col-span-4 flex flex-col gap-4">
+            <ControlPanel
+              onImageCaptured={handleImageCaptured}
+              onPlanMission={handlePlanMission}
+              isDetecting={isDetecting}
+              isPlanning={isPlanning}
+              detectionStats={detectionStats}
+              planStats={plan}
+              selectedCropContext={selectedCropContext}
+              candidateThreshold={candidateThreshold}
+              onCandidateThresholdChange={setCandidateThreshold}
+              uncertainMin={uncertainMin}
+              onUncertainMinChange={setUncertainMin}
+              safetyBufferCm={safetyBufferCm}
+              onSafetyBufferCmChange={setSafetyBufferCm}
+              health={health}
+            />
+
+            <CommandsList plan={plan} />
+          </div>
+        </div>
       </main>
 
       {/* Modals */}
