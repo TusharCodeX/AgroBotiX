@@ -37,7 +37,7 @@ export default function Navbar({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-bold text-xl tracking-tight text-white">AgriPath</h1>
+              <h1 className="font-bold text-xl tracking-tight text-white">AgroBotix</h1>
               <span className="text-xs px-2 py-0.5 rounded font-mono font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                 Indian Field Vision
               </span>
@@ -55,16 +55,16 @@ export default function Navbar({
             onChange={(e) => onCropContextChange(e.target.value)}
             className="bg-transparent border-none text-emerald-300 font-semibold text-xs focus:outline-none cursor-pointer pr-1"
           >
-            <option value="wheat" className="bg-slate-900 text-white">🌾 Wheat (Triticum aestivum)</option>
-            <option value="rice" className="bg-slate-900 text-white">🌾 Rice / Paddy (Oryza sativa)</option>
-            <option value="mustard" className="bg-slate-900 text-white">🌼 Mustard (Brassica juncea)</option>
-            <option value="maize" className="bg-slate-900 text-white">🌽 Maize (Zea mays)</option>
-            <option value="sugarcane" className="bg-slate-900 text-white">🎋 Sugarcane (Saccharum officinarum)</option>
-            <option value="vegetables" className="bg-slate-900 text-white">🍅 Vegetables (Tomato/Brinjal/Okra/Onion)</option>
-            <option value="sorghum_millets" className="bg-slate-900 text-white">🌾 Sorghum & Millets (Jowar/Bajra/Ragi)</option>
-            <option value="pulses_oilseeds" className="bg-slate-900 text-white">🫘 Pulses & Oilseeds (Gram/Arhar/Soybean)</option>
-            <option value="cotton" className="bg-slate-900 text-white">🌿 Cotton (Gossypium hirsutum)</option>
-            <option value="orchard" className="bg-slate-900 text-white">🍎 Fruit Orchards (Mango/Guava/Apple)</option>
+            <option value="wheat" className="bg-slate-900 text-white">🌾 Wheat</option>
+            <option value="rice" className="bg-slate-900 text-white">🌾 Rice / Paddy</option>
+            <option value="mustard" className="bg-slate-900 text-white">🌼 Mustard</option>
+            <option value="maize" className="bg-slate-900 text-white">🌽 Maize</option>
+            <option value="sugarcane" className="bg-slate-900 text-white">🎋 Sugarcane</option>
+            <option value="vegetables" className="bg-slate-900 text-white">🍅 Vegetables</option>
+            <option value="sorghum_millets" className="bg-slate-900 text-white">🌾 Sorghum & Millets</option>
+            <option value="pulses_oilseeds" className="bg-slate-900 text-white">🫘 Pulses & Oilseeds</option>
+            <option value="cotton" className="bg-slate-900 text-white">🌿 Cotton</option>
+            <option value="orchard" className="bg-slate-900 text-white">🍎 Fruit Orchards</option>
           </select>
         </div>
 

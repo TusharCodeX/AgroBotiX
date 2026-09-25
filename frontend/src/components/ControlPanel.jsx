@@ -117,16 +117,16 @@ export default function ControlPanel({
   };
 
   const cropContextNames = {
-    wheat: { name: 'Wheat', sci: 'Triticum aestivum', season: 'Rabi', weed: 'Phalaris minor (Gulli Danda)' },
-    rice: { name: 'Rice / Paddy', sci: 'Oryza sativa', season: 'Kharif', weed: 'Echinochloa crus-galli (Sanwak)' },
-    mustard: { name: 'Mustard', sci: 'Brassica juncea', season: 'Rabi', weed: 'Chenopodium album (Bathua)' },
-    maize: { name: 'Maize', sci: 'Zea mays', season: 'Kharif', weed: 'Cyperus rotundus (Motha)' },
-    sugarcane: { name: 'Sugarcane', sci: 'Saccharum officinarum', season: 'Perennial', weed: 'Cynodon dactylon (Doob)' },
-    vegetables: { name: 'Vegetables', sci: 'Solanaceae / Allium', season: 'Kharif/Rabi', weed: 'Trianthema portulacastrum (Bishkhapra)' },
-    sorghum_millets: { name: 'Sorghum & Millets', sci: 'Sorghum / Pennisetum', season: 'Kharif', weed: 'Dactyloctenium aegyptium' },
-    pulses_oilseeds: { name: 'Pulses & Oilseeds', sci: 'Cicer / Cajanus / Glycine', season: 'Kharif/Rabi', weed: 'Abutilon indicum (Kanghi)' },
-    cotton: { name: 'Cotton', sci: 'Gossypium hirsutum', season: 'Kharif', weed: 'Trianthema / Digera' },
-    orchard: { name: 'Fruit Orchards', sci: 'Mangifera / Psidium', season: 'Perennial', weed: 'Parthenium hysterophorus' },
+    wheat: { name: 'Wheat', season: 'Rabi', weed: 'Gulli Danda / Wild Oats' },
+    rice: { name: 'Rice / Paddy', season: 'Kharif', weed: 'Sanwak / Barnyard Grass' },
+    mustard: { name: 'Mustard', season: 'Rabi', weed: 'Bathua / Wild Mustard' },
+    maize: { name: 'Maize', season: 'Kharif', weed: 'Motha / Crabgrass' },
+    sugarcane: { name: 'Sugarcane', season: 'Perennial', weed: 'Doob Grass / Nut Grass' },
+    vegetables: { name: 'Vegetables', season: 'Kharif/Rabi', weed: 'Bishkhapra / Pigweed' },
+    sorghum_millets: { name: 'Sorghum & Millets', season: 'Kharif', weed: 'Crowfoot Grass' },
+    pulses_oilseeds: { name: 'Pulses & Oilseeds', season: 'Kharif/Rabi', weed: 'Kanghi / Wild Clover' },
+    cotton: { name: 'Cotton', season: 'Kharif', weed: 'Bishkhapra / Celosia' },
+    orchard: { name: 'Fruit Orchards', season: 'Perennial', weed: 'Parthenium (Gajar Ghas)' },
   };
 
   const currentCrop = cropContextNames[selectedCropContext] || cropContextNames['wheat'];
@@ -161,7 +161,7 @@ export default function ControlPanel({
       <div className="bg-slate-950/80 border border-slate-800 p-2.5 rounded-lg text-xs space-y-1">
         <div className="flex items-center justify-between">
           <span className="text-slate-400">Target Crop:</span>
-          <span className="font-semibold text-emerald-300 italic">{currentCrop.name} ({currentCrop.sci})</span>
+          <span className="font-semibold text-emerald-300">{currentCrop.name}</span>
         </div>
         <div className="flex items-center justify-between text-[11px]">
           <span className="text-slate-500">Key Weed Threat:</span>

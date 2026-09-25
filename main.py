@@ -94,7 +94,7 @@ serial_controller = SerialController(
 
 # Create FastAPI App
 app = FastAPI(
-    title="AgriPath API",
+    title="AgroBotix API",
     description="Weed vs Crop Detection and Skid-Steer Path Planning Backend",
     version="1.0.0",
 )
@@ -143,7 +143,7 @@ def get_health():
     model_loaded = detector.is_model_loaded()
     return {
         "status": "online",
-        "app_name": "AgriPath Indian Agricultural Vision",
+        "app_name": "AgroBotix Indian Agricultural Vision",
         "model_available": model_loaded,
         "detector_model": detector.model_name if model_loaded else "MODEL UNAVAILABLE",
         "default_crop_context": detector.default_crop_context,

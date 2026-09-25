@@ -146,8 +146,7 @@ export default function CanvasViewer({
 
         // Label pill at top
         ctx.font = 'bold 11px JetBrains Mono, monospace';
-        const speciesShort = det.species_name ? ` | ${det.species_name.split(' ')[0]}` : '';
-        const text = `${label} (${(det.confidence * 100).toFixed(0)}%)${speciesShort}`;
+        const text = `${label} (${(det.confidence * 100).toFixed(0)}%)`;
         const textWidth = ctx.measureText(text).width;
 
         ctx.fillStyle = color;
@@ -441,8 +440,8 @@ export default function CanvasViewer({
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-slate-300 font-mono">
             <div className="bg-slate-950 p-2 rounded border border-slate-800">
-              <span className="text-[10px] text-slate-500 block">Botanical Species:</span>
-              <span className="font-semibold text-emerald-300 italic">{selectedPlant.species_name || 'N/A'}</span>
+              <span className="text-[10px] text-slate-500 block">Class:</span>
+              <span className="font-semibold text-emerald-300 uppercase">{selectedPlant.raw_class_name || selectedPlant.status}</span>
             </div>
             <div className="bg-slate-950 p-2 rounded border border-slate-800">
               <span className="text-[10px] text-slate-500 block">Model Confidence:</span>

@@ -37,7 +37,7 @@ export default function CommandsList({ plan }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `agripath_mission_${Date.now()}.json`;
+    a.download = `agrobotix_mission_${Date.now()}.json`;
     a.click();
   };
 
@@ -50,7 +50,7 @@ export default function CommandsList({ plan }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `agripath_commands_${Date.now()}.csv`;
+    a.download = `agrobotix_commands_${Date.now()}.csv`;
     a.click();
   };
 

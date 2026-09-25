@@ -205,8 +205,8 @@ class OnnxDetector:
                     area_px=c["area_px"],
                     area_cm2=area_cm2,
                     dist_to_nearest_crop_cm=0.0,
-                    species_name=crop_profile.scientific_name,
-                    crop_species=crop_profile.scientific_name,
+                    species_name=None,
+                    crop_species=crop_profile.crop_name,
                     action=action,
                     rejection_reason=reason,
                     vegetation_score=veg_score,
@@ -226,9 +226,8 @@ class OnnxDetector:
             # Secondary Soil & Vegetation validation
             is_veg, veg_score, rej_reason = self.soil_validator.validate_roi(image, bbox)
 
-            # Match species metadata
-            species_match = match_weed_species(ctx, w["aspect_ratio"], w["area_px"])
-            species_name = species_match.scientific_name if species_match else "Unspecified Weed"
+            # Weed species metadata
+            species_name = None
 
             # Compute Euclidean distance in cm to nearest confirmed crop
             dist_to_crop_cm = 999.0

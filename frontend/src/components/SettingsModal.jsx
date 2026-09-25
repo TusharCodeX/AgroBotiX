@@ -27,7 +27,7 @@ export default function SettingsModal({ isOpen, onClose, config, onSaveConfig })
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
             <Sliders className="w-5 h-5 text-blue-400" />
-            <h3 className="font-semibold text-slate-100 text-base">AgriPath Rover & Planner Settings</h3>
+            <h3 className="font-semibold text-slate-100 text-base">AgroBotix Rover & Planner Settings</h3>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white">
             <X className="w-5 h-5" />
